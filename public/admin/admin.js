@@ -13,6 +13,14 @@
   // published (GitHub Pages), not against the admin's own origin.
   const STOREFRONT_BASE = "https://andiehoang.github.io/vennus-jewelry/";
   const mediaSrc = (url) => STOREFRONT_BASE + String(url || "").replace(/^\/+/, "");
+  // Inline style so an admin preview matches the real crop (position +
+  // zoom) instead of just showing the raw, uncropped file.
+  const mediaStyle = (m) => {
+    if (!m) return "";
+    const position = m.position || "center center";
+    const zoomPart = m.zoom && m.zoom !== 1 ? ` transform:scale(${m.zoom}); transform-origin:${position};` : "";
+    return `object-fit:cover; object-position:${position};${zoomPart}`;
+  };
   const state = { user: null, products: [], media: [], settings: {} };
 
   /* ---------- fetch helper ---------- */
@@ -75,45 +83,142 @@
     if (e.target.id === "modalOverlay") closeModal();
   });
 
-  /* ---------- media pick helper (used by Settings + Product edit) ----------
-     A minimal pick-from-library-or-upload modal. Framing (crop/zoom) is
-     intentionally NOT duplicated here — that already exists, done well,
-     as the pencil directly on the storefront; this just assigns which
-     photo/video is attached. */
-  function pickMedia({ onPick }) {
+  /* ---------- media pick + crop helper (used by Settings + Product edit) ----------
+     Two steps: choose/upload a file, then frame it — real drag-to-pan,
+     scroll-to-zoom, against the exact aspect ratio it will render at.
+     This is the same tool (and the same math) as the pencil directly
+     on the storefront, so a crop made here looks identical there and
+     vice versa.
+       aspectRatio   — width/height number the crop frame should match
+       existingMedia — { url, type, position, zoom } to jump straight
+                        to the crop step on an already-chosen file
+       onPick(media) — called with { url, type, position, zoom } */
+  function pickMedia({ aspectRatio, existingMedia, onPick }) {
     const listHTML = state.media.map(m => `
       <div class="media-item" data-url="${esc(m.url)}" data-type="${m.type}" style="cursor:pointer;">
         ${m.type === "video" ? `<video src="${esc(mediaSrc(m.url))}" muted></video>` : `<img src="${esc(mediaSrc(m.url))}">`}
       </div>`).join("") || `<p class="panel-empty">Nothing uploaded yet — use the box below.</p>`;
 
     openModal(`
-      <h3>Choose an image or video</h3>
-      <p>Pick something already in your library, or upload something new.</p>
-      <div class="media-grid" id="pickGrid" style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${listHTML}</div>
-      <div class="dropzone" id="pickDrop">Drag a file here, or
-        <label>choose a file<input type="file" id="pickFile" accept="image/*,video/*" style="display:none;"></label>
+      <h3>${existingMedia ? "Adjust framing" : "Choose an image or video"}</h3>
+      <div id="pickStep1">
+        <p>Pick something already in your library, or upload something new.</p>
+        <div class="media-grid" id="pickGrid" style="max-height:280px; overflow-y:auto; margin-bottom:16px;">${listHTML}</div>
+        <div class="dropzone" id="pickDrop">Drag a file here, or
+          <label>choose a file<input type="file" id="pickFile" accept="image/*,video/*" style="display:none;"></label>
+        </div>
+      </div>
+      <div id="pickStep2" style="display:none;">
+        <p style="font-size:.85rem; font-weight:500;">Drag to reposition, scroll (or use the buttons) to zoom</p>
+        <div class="crop-frame" id="cropFrame" style="${aspectRatio ? `aspect-ratio:${aspectRatio};` : ""}"></div>
+        <div class="crop-controls">
+          <button type="button" class="zoom-btn" id="zoomOut">&minus;</button>
+          <input type="range" id="zoomSlider" min="100" max="300" value="100" step="1">
+          <button type="button" class="zoom-btn" id="zoomIn">+</button>
+        </div>
+        <p class="crop-hint">This is exactly how it will be framed on the site.</p>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button type="button" class="btn btn-primary" id="saveCrop">Save</button>
+          ${existingMedia ? "" : '<button type="button" class="btn" id="backToStep1">Choose a different file</button>'}
+          <button type="button" class="btn" id="resetCrop">Reset</button>
+        </div>
       </div>
     `);
+
     document.querySelectorAll("#pickGrid .media-item").forEach(item => {
-      item.onclick = () => { closeModal(); onPick({ url: item.dataset.url, type: item.dataset.type }); };
+      item.onclick = () => showStep2({ url: item.dataset.url, type: item.dataset.type });
     });
     const dz = document.getElementById("pickDrop");
     ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("hot"); }));
     ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("hot"); }));
-    dz.addEventListener("drop", e => uploadThenPick(e.dataTransfer.files));
-    document.getElementById("pickFile").addEventListener("change", e => uploadThenPick(e.target.files));
+    dz.addEventListener("drop", e => uploadThenCrop(e.dataTransfer.files));
+    document.getElementById("pickFile").addEventListener("change", e => uploadThenCrop(e.target.files));
 
-    async function uploadThenPick(files) {
+    async function uploadThenCrop(files) {
       if (!files || !files[0]) return;
       const fd = new FormData();
       fd.append("files", files[0]);
       try {
         const r = await api("/media", { method: "POST", body: fd });
         state.media.unshift(r.files[0]);
-        closeModal();
-        onPick(r.files[0]);
+        showStep2(r.files[0]);
       } catch (err) { toast(err.message, true); }
     }
+
+    let pending = null;
+    let posX = 50, posY = 50, zoom = 1;
+
+    function showStep2(media) {
+      pending = media;
+      const parsed = media.position && /(\d+(\.\d+)?)% (\d+(\.\d+)?)%/.exec(media.position);
+      posX = parsed ? +parsed[1] : 50;
+      posY = parsed ? +parsed[3] : 50;
+      zoom = media.zoom || 1;
+
+      document.getElementById("pickStep1").style.display = "none";
+      document.getElementById("pickStep2").style.display = "block";
+
+      const frame = document.getElementById("cropFrame");
+      frame.innerHTML = media.type === "video"
+        ? `<video src="${esc(mediaSrc(media.url))}" muted loop autoplay playsinline></video>`
+        : `<img src="${esc(mediaSrc(media.url))}" draggable="false">`;
+      renderTransform();
+      wireCropInteraction(frame);
+    }
+
+    function renderTransform() {
+      const media = document.querySelector("#cropFrame img, #cropFrame video");
+      if (!media) return;
+      media.style.objectPosition = `${posX}% ${posY}%`;
+      media.style.transform = zoom !== 1 ? `scale(${zoom})` : "";
+      media.style.transformOrigin = `${posX}% ${posY}%`;
+      document.getElementById("zoomSlider").value = Math.round(zoom * 100);
+    }
+
+    function setZoom(newZoom) {
+      zoom = Math.min(3, Math.max(1, newZoom));
+      renderTransform();
+    }
+
+    function wireCropInteraction(frame) {
+      let dragging = false, lastX = 0, lastY = 0;
+      const onDown = (clientX, clientY) => { dragging = true; lastX = clientX; lastY = clientY; frame.classList.add("dragging"); };
+      const onMove = (clientX, clientY) => {
+        if (!dragging) return;
+        const rect = frame.getBoundingClientRect();
+        const dxPct = ((clientX - lastX) / rect.width) * 100 / zoom;
+        const dyPct = ((clientY - lastY) / rect.height) * 100 / zoom;
+        posX = Math.min(100, Math.max(0, posX - dxPct));
+        posY = Math.min(100, Math.max(0, posY - dyPct));
+        lastX = clientX; lastY = clientY;
+        renderTransform();
+      };
+      const onUp = () => { dragging = false; frame.classList.remove("dragging"); };
+
+      frame.addEventListener("mousedown", e => { e.preventDefault(); onDown(e.clientX, e.clientY); });
+      window.addEventListener("mousemove", e => onMove(e.clientX, e.clientY));
+      window.addEventListener("mouseup", onUp);
+      frame.addEventListener("touchstart", e => { const t = e.touches[0]; onDown(t.clientX, t.clientY); }, { passive: true });
+      frame.addEventListener("touchmove", e => { const t = e.touches[0]; onMove(t.clientX, t.clientY); }, { passive: true });
+      frame.addEventListener("touchend", onUp);
+      frame.addEventListener("wheel", e => { e.preventDefault(); setZoom(zoom - e.deltaY * 0.0015); }, { passive: false });
+    }
+
+    document.getElementById("zoomIn").onclick = () => setZoom(zoom + 0.2);
+    document.getElementById("zoomOut").onclick = () => setZoom(zoom - 0.2);
+    document.getElementById("zoomSlider").addEventListener("input", e => setZoom(e.target.value / 100));
+    document.getElementById("resetCrop").onclick = () => { posX = 50; posY = 50; zoom = 1; renderTransform(); };
+    document.getElementById("backToStep1")?.addEventListener("click", () => {
+      document.getElementById("pickStep1").style.display = "block";
+      document.getElementById("pickStep2").style.display = "none";
+    });
+    document.getElementById("saveCrop").onclick = () => {
+      onPick({ url: pending.url, type: pending.type, position: `${posX}% ${posY}%`, zoom });
+      closeModal();
+    };
+
+    // Re-framing an already-chosen photo — skip straight to the crop step.
+    if (existingMedia) showStep2(existingMedia);
   }
 
   /* =================================================================
@@ -328,12 +433,13 @@
           <div class="product-photo-row" id="photoRow">
             ${images.map((m, i) => `
               <div class="thumb" data-i="${i}">
-                ${m.type === "video" ? `<video src="${esc(mediaSrc(m.url))}" muted></video>` : `<img src="${esc(mediaSrc(m.url))}">`}
+                ${m.type === "video" ? `<video src="${esc(mediaSrc(m.url))}" muted style="${mediaStyle(m)}"></video>` : `<img src="${esc(mediaSrc(m.url))}" style="${mediaStyle(m)}">`}
                 <button type="button" data-rm="${i}" title="Remove">×</button>
               </div>`).join("")}
           </div>
+          ${images.length ? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">${images.map((m, i) => `<button type="button" class="btn btn-sm" data-crop="${i}">Crop photo ${i + 1}</button>`).join("")}</div>` : ""}
           <button type="button" class="btn btn-sm" id="addPhoto">+ Add from library / upload</button>
-          <p class="photo-note">To fine-tune framing (position/zoom) on a photo already here, use the pencil directly on the storefront's shop grid or product page — that's where the crop tool lives.</p>
+          <p class="photo-note">New photos are cropped to the product page's own frame (4:5) right when you add them — drag to reposition, scroll or use the buttons to zoom. Use "Crop photo N" above to re-frame one already here.</p>
         </div>
 
         <div class="modal-actions" style="justify-content:flex-start;">
@@ -358,7 +464,18 @@
         hasOptions = e.target.checked;
         content.querySelector("#optionFields").style.display = hasOptions ? "" : "none";
       };
-      content.querySelector("#addPhoto").onclick = () => pickMedia({ onPick: (m) => { images.push({ ...m, position: "center center", zoom: 1 }); redraw(); } });
+      content.querySelector("#addPhoto").onclick = () => pickMedia({
+        aspectRatio: 4 / 5,
+        onPick: (m) => { images.push(m); redraw(); }
+      });
+      content.querySelectorAll("[data-crop]").forEach(b => b.onclick = () => {
+        const i = +b.dataset.crop;
+        pickMedia({
+          aspectRatio: 4 / 5,
+          existingMedia: images[i],
+          onPick: (m) => { images[i] = m; redraw(); }
+        });
+      });
 
       content.querySelector("#saveProduct").onclick = async () => {
         const body = {
@@ -443,18 +560,18 @@
      SETTINGS
      ================================================================= */
   const IMAGE_SLOTS = [
-    { key: "hero_home", label: "Homepage Hero" },
-    { key: "hero_maison", label: "Maison Hero" },
-    { key: "category_necklaces", label: "Category Tile — Necklaces" },
-    { key: "category_earrings", label: "Category Tile — Earrings" },
-    { key: "category_bracelets", label: "Category Tile — Bracelets" },
-    { key: "category_rings", label: "Category Tile — Rings" },
-    { key: "home_editorial_1", label: "Homepage Editorial 1" },
-    { key: "home_editorial_2", label: "Homepage Editorial 2" },
-    { key: "maison_editorial_1", label: "Maison Editorial 1" },
-    { key: "maison_editorial_2", label: "Maison Editorial 2" },
-    { key: "mega_feature_jewelry", label: "Menu Feature — Jewelry" },
-    { key: "mega_feature_maison", label: "Menu Feature — Maison" }
+    { key: "hero_home", label: "Homepage Hero", aspect: 16 / 9 },
+    { key: "hero_maison", label: "Maison Hero", aspect: 16 / 9 },
+    { key: "category_necklaces", label: "Category Tile — Necklaces", aspect: 1 },
+    { key: "category_earrings", label: "Category Tile — Earrings", aspect: 1 },
+    { key: "category_bracelets", label: "Category Tile — Bracelets", aspect: 1 },
+    { key: "category_rings", label: "Category Tile — Rings", aspect: 1 },
+    { key: "home_editorial_1", label: "Homepage Editorial 1", aspect: 1000 / 1200 },
+    { key: "home_editorial_2", label: "Homepage Editorial 2", aspect: 1000 / 1200 },
+    { key: "maison_editorial_1", label: "Maison Editorial 1", aspect: 1000 / 1200 },
+    { key: "maison_editorial_2", label: "Maison Editorial 2", aspect: 1000 / 1200 },
+    { key: "mega_feature_jewelry", label: "Menu Feature — Jewelry", aspect: 760 / 570 },
+    { key: "mega_feature_maison", label: "Menu Feature — Maison", aspect: 760 / 570 }
   ];
   const THEME_KEYS = [
     { key: "blanc", label: "Blanc (background)" }, { key: "craie", label: "Craie (panels)" },
@@ -485,19 +602,20 @@
             <div class="setting-image-card" data-key="${slot.key}">
               <div class="setting-image-preview">
                 ${m ? (m.type === "video"
-                  ? `<video src="${esc(mediaSrc(m.url))}" muted></video>`
-                  : `<img src="${esc(mediaSrc(m.url))}">`)
+                  ? `<video src="${esc(mediaSrc(m.url))}" muted style="${mediaStyle(m)}"></video>`
+                  : `<img src="${esc(mediaSrc(m.url))}" style="${mediaStyle(m)}">`)
                   : `<div class="empty-note">No image set — storefront shows its placeholder</div>`}
               </div>
               <div class="setting-image-label">${slot.label}</div>
               <div class="setting-image-actions">
                 <button type="button" class="btn btn-sm" data-choose="${slot.key}">Choose</button>
+                ${m ? `<button type="button" class="btn btn-sm" data-crop="${slot.key}">Crop</button>` : ""}
                 ${m ? `<button type="button" class="btn btn-sm btn-danger" data-clear="${slot.key}">Clear</button>` : ""}
               </div>
             </div>`;
           }).join("")}
         </div>
-        <p class="photo-note">To fine-tune position/zoom, use the pencil directly on that spot on the storefront — same as with product photos.</p>
+        <p class="photo-note">Choosing or uploading an image opens the crop tool right away — drag to reposition, scroll or use the buttons to zoom, matched to this spot's own shape.</p>
       </div>
 
       <div class="panel">
@@ -521,17 +639,21 @@
       } catch (err) { toast(err.message, true); }
     };
 
+    async function saveSlot(key, media) {
+      try {
+        const updated = await api("/settings", { method: "PUT", body: JSON.stringify({ [key]: media }) });
+        state.settings = updated;
+        renderSettings(content);
+        toast("Saved.");
+      } catch (err) { toast(err.message, true); }
+    }
     content.querySelectorAll("[data-choose]").forEach(b => b.onclick = () => {
-      pickMedia({
-        onPick: async (m) => {
-          try {
-            const updated = await api("/settings", { method: "PUT", body: JSON.stringify({ [b.dataset.choose]: { ...m, position: "center center", zoom: 1 } }) });
-            state.settings = updated;
-            renderSettings(content);
-            toast("Saved.");
-          } catch (err) { toast(err.message, true); }
-        }
-      });
+      const slot = IMAGE_SLOTS.find(s2 => s2.key === b.dataset.choose);
+      pickMedia({ aspectRatio: slot.aspect, onPick: (m) => saveSlot(slot.key, m) });
+    });
+    content.querySelectorAll("[data-crop]").forEach(b => b.onclick = () => {
+      const slot = IMAGE_SLOTS.find(s2 => s2.key === b.dataset.crop);
+      pickMedia({ aspectRatio: slot.aspect, existingMedia: s[slot.key], onPick: (m) => saveSlot(slot.key, m) });
     });
     content.querySelectorAll("[data-clear]").forEach(b => b.onclick = async () => {
       try {

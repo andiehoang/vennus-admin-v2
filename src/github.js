@@ -9,24 +9,22 @@
      2. Uploaded product/site photos and videos, committed into
         vennus-jewelry's images/ folder (STOREFRONT_REPO), so they
         serve from the exact URLs the storefront already expects.
-   Both use the same token (GITHUB_TOKEN), which needs Contents:
-   read/write on both repos.
+   These use SEPARATE tokens (DATA_GITHUB_TOKEN / STOREFRONT_GITHUB_TOKEN)
+   rather than one token scoped to both repos — a fine-grained PAT
+   covering two repos at once turned out to write fine to one and be
+   silently refused on the other, for reasons GitHub's API didn't
+   surface a clear cause for. One token per repo is both easier to
+   reason about and less privileged in the first place.
    ================================================================= */
 
 const API = "https://api.github.com";
 
-function assertToken() {
-  if (!process.env.GITHUB_TOKEN) {
-    throw new Error("GITHUB_TOKEN is not set — see .env.example.");
-  }
-}
-
-async function ghFetch(path, opts = {}) {
-  assertToken();
+async function ghFetch(token, path, opts = {}) {
+  if (!token) throw new Error("A required GitHub token is not set — see .env.example.");
   const res = await fetch(API + path, {
     ...opts,
     headers: {
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
       ...opts.headers
@@ -38,8 +36,8 @@ async function ghFetch(path, opts = {}) {
 /* Get a file's current content + sha (sha is required to update or
    delete it later — GitHub's Contents API is optimistic-locked on
    it). Returns null if the file doesn't exist yet. */
-async function getFile(repo, filePath, branch = "main") {
-  const res = await ghFetch(`/repos/${repo}/contents/${encodeURI(filePath)}?ref=${branch}`);
+async function getFile(token, repo, filePath, branch = "main") {
+  const res = await ghFetch(token, `/repos/${repo}/contents/${encodeURI(filePath)}?ref=${branch}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub getFile ${filePath} failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
@@ -53,8 +51,8 @@ async function getFile(repo, filePath, branch = "main") {
    base64-encoded (works for text and binary alike). Pass the sha
    from getFile() when updating an existing file; omit it to create
    a new one. */
-async function putFile(repo, filePath, base64Content, message, sha, branch = "main") {
-  const res = await ghFetch(`/repos/${repo}/contents/${encodeURI(filePath)}`, {
+async function putFile(token, repo, filePath, base64Content, message, sha, branch = "main") {
+  const res = await ghFetch(token, `/repos/${repo}/contents/${encodeURI(filePath)}`, {
     method: "PUT",
     body: JSON.stringify({
       message,
@@ -69,8 +67,8 @@ async function putFile(repo, filePath, base64Content, message, sha, branch = "ma
 
 /* Convenience wrapper for the JSON data store: reads/writes a JS
    value as pretty-printed JSON, handling the sha dance internally. */
-async function readJSON(repo, filePath, fallback) {
-  const file = await getFile(repo, filePath);
+async function readJSON(token, repo, filePath, fallback) {
+  const file = await getFile(token, repo, filePath);
   if (!file) return { value: fallback, sha: null };
   try {
     return { value: JSON.parse(file.content.toString("utf8")), sha: file.sha };
@@ -79,14 +77,14 @@ async function readJSON(repo, filePath, fallback) {
   }
 }
 
-async function writeJSON(repo, filePath, value, message, knownSha) {
+async function writeJSON(token, repo, filePath, value, message, knownSha) {
   const body = Buffer.from(JSON.stringify(value, null, 2), "utf8").toString("base64");
   let sha = knownSha;
   if (sha === undefined) {
-    const existing = await getFile(repo, filePath);
+    const existing = await getFile(token, repo, filePath);
     sha = existing ? existing.sha : undefined;
   }
-  const result = await putFile(repo, filePath, body, message, sha || undefined);
+  const result = await putFile(token, repo, filePath, body, message, sha || undefined);
   return result.content.sha;
 }
 

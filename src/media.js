@@ -22,7 +22,7 @@ async function commitUpload(fileBuffer, originalName) {
   const { name, ext } = sanitizeName(originalName);
   const filePath = `images/${name}`;
   const base64 = fileBuffer.toString("base64");
-  await github.putFile(STOREFRONT_REPO, filePath, base64, `Add ${name} via Vennus admin`);
+  await github.putFile(process.env.STOREFRONT_GITHUB_TOKEN, STOREFRONT_REPO, filePath, base64, `Add ${name} via Vennus admin`);
   return {
     url: filePath,
     type: VIDEO_EXT.has(ext) ? "video" : "image"

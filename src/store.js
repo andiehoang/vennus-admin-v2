@@ -59,7 +59,7 @@ async function load(name) {
     collections[name] = DEFAULTS[name];
     return;
   }
-  const { value, sha } = await github.readJSON(DATA_REPO, file(name), DEFAULTS[name]);
+  const { value, sha } = await github.readJSON(process.env.DATA_GITHUB_TOKEN, DATA_REPO, file(name), DEFAULTS[name]);
   collections[name] = value;
   shas[name] = sha;
   if (!sha) {
@@ -72,7 +72,7 @@ async function load(name) {
 async function persist(name, message) {
   if (!DATA_REPO || VOLATILE.has(name)) return;
   return enqueue(name, async () => {
-    const sha = await github.writeJSON(DATA_REPO, file(name), collections[name], message, shas[name]);
+    const sha = await github.writeJSON(process.env.DATA_GITHUB_TOKEN, DATA_REPO, file(name), collections[name], message, shas[name]);
     shas[name] = sha;
   });
 }

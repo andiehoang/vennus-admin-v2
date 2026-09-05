@@ -5,7 +5,7 @@ const cors = require("cors");
 const store = require("./src/store");
 const auth = require("./src/auth");
 
-const REQUIRED_ENV = ["JWT_SECRET", "GITHUB_TOKEN", "DATA_REPO"];
+const REQUIRED_ENV = ["JWT_SECRET", "DATA_GITHUB_TOKEN", "DATA_REPO", "STOREFRONT_GITHUB_TOKEN"];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length) {
   console.error(`Missing required environment variable(s): ${missing.join(", ")}. See .env.example.`);

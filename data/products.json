@@ -7,7 +7,14 @@
     "compareAt": null,
     "tag": "new",
     "sku": "VJ-NK-001",
-    "images": [],
+    "images": [
+      {
+        "url": "images/1788595488509-hkyhwl5bkaa6ljw.webp",
+        "type": "image",
+        "position": "center center",
+        "zoom": 1
+      }
+    ],
     "description": "A single Akoya pearl suspended on a fine 14k gold-filled chain. Quietly luminous, made to be worn every day and layered on special ones.",
     "details": [
       "7–7.5mm AAA Akoya pearl, 14k gold-filled chain",

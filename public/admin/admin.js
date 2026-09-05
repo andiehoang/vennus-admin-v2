@@ -573,11 +573,22 @@
     { key: "mega_feature_jewelry", label: "Menu Feature — Jewelry", aspect: 760 / 570 },
     { key: "mega_feature_maison", label: "Menu Feature — Maison", aspect: 760 / 570 }
   ];
+  // Real brand defaults — used as each color input's starting value
+  // whenever nothing's been customized yet. These MUST match the
+  // storefront's :root defaults in css/style.css exactly, since an
+  // untouched swatch saved as-is should be a harmless no-op, not a
+  // color change. (Defaulting these to black previously meant just
+  // opening this panel and clicking Save Theme — without touching
+  // anything — overwrote the whole site's palette with #000000.)
   const THEME_KEYS = [
-    { key: "blanc", label: "Blanc (background)" }, { key: "craie", label: "Craie (panels)" },
-    { key: "sand", label: "Sand (accent)" }, { key: "chai", label: "Chai (hover/links)" },
-    { key: "beton", label: "Beton (muted text)" }, { key: "umber", label: "Umber (headings)" },
-    { key: "blush", label: "Blush (small accents)" }, { key: "champagne", label: "Champagne (gold hover)" }
+    { key: "blanc", label: "Blanc (background)", default: "#FAF7F1" },
+    { key: "craie", label: "Craie (panels)", default: "#EDE3D3" },
+    { key: "sand", label: "Sand (accent)", default: "#C9AC80" },
+    { key: "chai", label: "Chai (hover/links)", default: "#B8865A" },
+    { key: "beton", label: "Beton (muted text)", default: "#8D8477" },
+    { key: "umber", label: "Umber (headings)", default: "#3B2C20" },
+    { key: "blush", label: "Blush (small accents)", default: "#E8CFC8" },
+    { key: "champagne", label: "Champagne (gold hover)", default: "#E4D5AC" }
   ];
 
   async function renderSettings(content) {
@@ -623,7 +634,7 @@
         <div class="color-grid">
           ${THEME_KEYS.map(t => `
             <div class="color-field">
-              <input type="color" id="theme_${t.key}" value="${(s.theme && s.theme[t.key]) || "#000000"}">
+              <input type="color" id="theme_${t.key}" value="${(s.theme && s.theme[t.key]) || t.default}">
               <span class="color-name">${t.label}</span>
             </div>`).join("")}
         </div>

@@ -445,6 +445,10 @@
   const IMAGE_SLOTS = [
     { key: "hero_home", label: "Homepage Hero" },
     { key: "hero_maison", label: "Maison Hero" },
+    { key: "category_necklaces", label: "Category Tile — Necklaces" },
+    { key: "category_earrings", label: "Category Tile — Earrings" },
+    { key: "category_bracelets", label: "Category Tile — Bracelets" },
+    { key: "category_rings", label: "Category Tile — Rings" },
     { key: "home_editorial_1", label: "Homepage Editorial 1" },
     { key: "home_editorial_2", label: "Homepage Editorial 2" },
     { key: "maison_editorial_1", label: "Maison Editorial 1" },

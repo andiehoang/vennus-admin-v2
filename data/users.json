@@ -3,7 +3,7 @@
     "id": 1,
     "name": "Owner",
     "email": "owner@vennusjewelry.com",
-    "passwordHash": "$2a$10$Aql6Qef8Z.o3.AJr1C3Sz.otID4XH0.tNLnJpq9lp3I6iwqBSiJgm",
+    "passwordHash": "$2a$10$reP9HD9FmQpQyaB3HMOHnur.izzIXSIZg5O2giiRZm0mbIGqcfVGC",
     "role": "owner",
     "createdAt": "2026-09-05T07:14:00.737Z"
   }

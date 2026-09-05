@@ -47,22 +47,40 @@ async function getFile(token, repo, filePath, branch = "main") {
   };
 }
 
+/* Every commit to a given repo lands on the same branch tip, so two
+   writes in flight at once (e.g. saving several JSON collections in
+   parallel on boot) will race each other's base commit and one gets
+   a 409. Serialize writes per-repo here, once, so every caller (the
+   data store, the media uploader) gets this for free instead of
+   each needing its own queue. */
+const repoQueues = new Map();
+function serialized(repo, task) {
+  const prev = repoQueues.get(repo) || Promise.resolve();
+  const next = prev.then(task, task);
+  repoQueues.set(repo, next.catch(() => {}));
+  return next;
+}
+
 /* Create or update a file. base64Content is the raw bytes, already
    base64-encoded (works for text and binary alike). Pass the sha
    from getFile() when updating an existing file; omit it to create
-   a new one. */
+   a new one — but note that since writes are serialized per-repo,
+   it's safest to look the sha up fresh right before writing rather
+   than reusing one read far earlier (see writeJSON below). */
 async function putFile(token, repo, filePath, base64Content, message, sha, branch = "main") {
-  const res = await ghFetch(token, `/repos/${repo}/contents/${encodeURI(filePath)}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      message,
-      content: base64Content,
-      branch,
-      ...(sha ? { sha } : {})
-    })
+  return serialized(repo, async () => {
+    const res = await ghFetch(token, `/repos/${repo}/contents/${encodeURI(filePath)}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        message,
+        content: base64Content,
+        branch,
+        ...(sha ? { sha } : {})
+      })
+    });
+    if (!res.ok) throw new Error(`GitHub putFile ${filePath} failed: ${res.status} ${await res.text()}`);
+    return res.json();
   });
-  if (!res.ok) throw new Error(`GitHub putFile ${filePath} failed: ${res.status} ${await res.text()}`);
-  return res.json();
 }
 
 /* Convenience wrapper for the JSON data store: reads/writes a JS

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vennus Admin</title>
+<link rel="stylesheet" href="admin.css?v=1">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="login-screen" id="loginScreen">
+  <form class="login-card" id="loginForm">
+    <h1>VENNUS<span>.</span></h1>
+    <p class="login-sub">Sign in to manage the store.</p>
+    <div class="field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" required>
+    </div>
+    <p class="login-error" id="loginError"></p>
+    <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+  </form>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div class="app" id="app" hidden>
+
+  <!-- Sidebar (desktop) / slide-in drawer (mobile) -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">VENNUS<span>.</span></div>
+    <ul class="side-nav">
+      <li><a href="#/" data-route="/">Dashboard</a></li>
+      <li><a href="#/products" data-route="/products">Products</a></li>
+      <li><a href="#/media" data-route="/media">Media Library</a></li>
+      <li><a href="#/settings" data-route="/settings">Site Settings</a></li>
+      <li><a href="#/orders" data-route="/orders">Orders</a></li>
+      <li><a href="#/customers" data-route="/customers">Customers</a></li>
+      <li class="owner-only"><a href="#/users" data-route="/users">Staff</a></li>
+    </ul>
+    <div class="sidebar-foot">
+      <a href="https://andiehoang.github.io/vennus-jewelry/index.html" target="_blank" rel="noopener" class="view-store-link">View storefront ↗</a>
+    </div>
+  </nav>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="icon-btn hamburger" id="openSidebar" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+      <h2 class="page-title" id="pageTitle">Dashboard</h2>
+      <div class="topbar-user">
+        <span class="user-name" id="topbarUserName"></span>
+        <span class="role-badge" id="topbarUserRole"></span>
+        <button type="button" class="btn btn-sm" id="signOutBtn">Sign Out</button>
+      </div>
+    </header>
+
+    <main class="content" id="content"><!-- rendered per-route --></main>
+  </div>
+</div>
+
+<!-- ============ MODAL SHELL (reused for confirmations / small forms) ============ -->
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div class="toast" id="toast" hidden></div>
+
+<script src="admin.js?v=1"></script>
+</body>
+</html>

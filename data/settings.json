@@ -1,8 +1,14 @@
 {
   "announcement": "Complimentary shipping on all Canadian orders over $150",
   "theme": {},
-  "seo_description": "VENNUS Jewelry \u2014 quietly luxurious pearl necklaces, earrings, bracelets, and rings, designed in small batches.",
-  "hero_home": null,
+  "seo_description": "VENNUS Jewelry — quietly luxurious pearl necklaces, earrings, bracelets, and rings, designed in small batches.",
+  "hero_home": {
+    "url": "images/1788595006192-web-holiday20-e003-girl-with-pearl-earrings-in-frost-2.webp",
+    "type": "image",
+    "position": "42.99858107851793% 49.25194805194808%",
+    "zoom": 1,
+    "heightOverride": "50.9vh"
+  },
   "home_editorial_1": {
     "url": "images/1788595488509-hkyhwl5bkaa6ljw.webp",
     "type": "image",

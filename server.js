@@ -14,15 +14,26 @@ if (missing.length) {
 
 const app = express();
 
-// The storefront (served from GitHub Pages, a different origin) calls
-// this API directly from the browser, so it needs to be allowed in.
-const allowedOrigins = (process.env.CORS_ORIGINS || "https://andiehoang.github.io")
-  .split(",").map(s => s.trim()).filter(Boolean);
+// The storefront (a different origin, served from GitHub Pages)
+// calls this API directly from the browser, so it needs to be
+// allowed in. The admin dashboard itself ALSO needs to be allowed —
+// it's served from this same app, but browsers still attach an
+// Origin header to same-origin POST/PUT/DELETE requests, and this
+// check runs against any request that has one, same-origin or not.
+// RENDER_EXTERNAL_URL is set automatically by Render to this
+// service's own URL, so that's included without needing to hardcode
+// or manually configure it.
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || "https://andiehoang.github.io")
+    .split(",").map(s => s.trim()).filter(Boolean)
+);
+if (process.env.RENDER_EXTERNAL_URL) allowedOrigins.add(process.env.RENDER_EXTERNAL_URL);
+
 app.use(cors({
   origin(origin, cb) {
-    // No Origin header (curl, server-to-server, same-origin admin
-    // pages) — allow. Otherwise it must be on the allow-list.
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    // No Origin header (curl, server-to-server) — allow. Otherwise
+    // it must be on the allow-list.
+    if (!origin || allowedOrigins.has(origin)) return cb(null, true);
     cb(new Error("Not allowed by CORS"));
   }
 }));

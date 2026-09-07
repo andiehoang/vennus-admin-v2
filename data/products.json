@@ -167,7 +167,12 @@
     "compareAt": 360,
     "tag": "sale",
     "sku": "VJ-BR-002",
-    "images": [],
+    "images": [
+      {
+        "url": "images/1788746525987-cropped-1788746524916.jpg",
+        "type": "image"
+      }
+    ],
     "description": "A slender fixed bangle in warm gold, set with a trio of small pearls. Layers quietly with the rest of the Vennus bracelet edit.",
     "details": [
       "5mm pearls, 14k gold-filled band",
